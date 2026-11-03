@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motorpsycho Archive Player</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <div>
+          <p class="brand__k">Motorpsycho</p>
+          <h1 class="brand__t">Archive player</h1>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="openWindow" title="Open in its own window" aria-label="Open in its own window">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M10 6H5v13h13v-5"/></svg>
+      </button>
+    </header>
+
+    <main class="main">
+      <!-- search view -->
+      <section id="viewList" class="view">
+        <form class="search" id="searchForm" role="search" autocomplete="off">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <label class="sr" for="q">Search recordings</label>
+          <input id="q" type="search" placeholder="Search venue, city, song, taper…" spellcheck="false">
+        </form>
+
+        <div class="filters">
+          <label class="sel"><span class="sr">Year</span>
+            <select id="year"><option value="">All years</option></select>
+          </label>
+          <label class="sel"><span class="sr">Sort</span>
+            <select id="sort">
+              <option value="desc">Newest first</option>
+              <option value="asc">Oldest first</option>
+            </select>
+          </label>
+          <button type="button" class="link-btn" id="reset" hidden>Reset</button>
+        </div>
+        <p class="count" id="count" aria-live="polite"></p>
+
+        <ul class="list" id="list"></ul>
+        <div class="state" id="listState" hidden></div>
+      </section>
+
+      <!-- recording view -->
+      <section id="viewDetail" class="view" hidden>
+        <button type="button" class="back" id="back"><span aria-hidden="true">←</span> All recordings</button>
+        <div class="rec" id="rec"></div>
+        <ol class="tracks" id="tracks"></ol>
+        <div class="state" id="detailState" hidden></div>
+      </section>
+    </main>
+
+    <footer class="bar" id="bar" hidden>
+      <div class="bar__now">
+        <button type="button" class="bar__title" id="barTitle" title="Show this recording"></button>
+        <p class="bar__rec" id="barRec"></p>
+      </div>
+      <div class="bar__seek">
+        <span class="time" id="timeNow">0:00</span>
+        <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Seek">
+        <span class="time" id="timeTotal">0:00</span>
+      </div>
+      <div class="bar__ctl">
+        <button type="button" class="icon-btn" id="prev" aria-label="Previous track" title="Previous">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+        </button>
+        <button type="button" class="play-btn" id="toggle" aria-label="Play">
+          <svg class="i-play" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="next" aria-label="Next track" title="Next">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/></svg>
+        </button>
+        <label class="vol" title="Volume"><span class="sr">Volume</span>
+          <input type="range" id="volume" min="0" max="100" value="100" aria-label="Volume">
+        </label>
+        <button type="button" class="icon-btn" id="stop" aria-label="Stop and close player" title="Stop">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <p class="bar__err" id="barErr" hidden></p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
