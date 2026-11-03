@@ -15,6 +15,25 @@ A Chrome extension to search and play the Motorpsycho live recordings from the
   and stop. Drag it anywhere, the position is remembered.
 - Hardware media keys and Chrome's media controls work (Media Session).
 
+## Screenshots
+
+**Browse by year.** Pick a year (with the number of recordings) and sort newest or oldest first.
+The player bar at the bottom keeps playing while you look around.
+
+![Year filter and the list of recordings](screenshots/search-year-filter.png)
+
+**Search.** Type a venue, city, song or taper, for example "het depot".
+
+![Search results for "het depot"](screenshots/search-text.png)
+
+**Open a recording.** All tracks with their length: play everything or start from any track.
+
+![Tracks of a recording](screenshots/recording-tracks.png)
+
+**In your toolbar.** Pin the extension (puzzle piece icon) so it is always one click away.
+
+![The extension icon in the Chrome toolbar](screenshots/toolbar-icon.png)
+
 ## Install (developer mode)
 
 1. Open `chrome://extensions`
