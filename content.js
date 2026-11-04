@@ -244,14 +244,26 @@
       }
     });
 
+    // Ask the worker for the current state. Done on load and every time this tab comes to the front: a tab in the
+    // background can be frozen by Chrome and miss the broadcast, so it would otherwise show an outdated player (or none).
+    var syncState = function () {
+      send({ type: 'getState' }).then(function (response) {
+        if (response && response.state) {
+          state = response.state;
+          render();
+        }
+      });
+    };
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') { syncState(); }
+    });
+    window.addEventListener('focus', syncState);
+    window.addEventListener('pageshow', syncState);
+
     chrome.storage.local.get('miniPos').then(function (data) {
       if (data.miniPos && typeof data.miniPos.fx === 'number') { pos = data.miniPos; }
-      return send({ type: 'getState' });
-    }).then(function (response) {
-      if (response && response.state) {
-        state = response.state;
-        render();
-      }
+      syncState();
     });
   } catch (error) {
     destroy();

@@ -101,6 +101,12 @@ async function openPlayerWindow() {
   await chrome.storage.session.set({ playerWindowId: created.id });
 }
 
+// Switching to another tab: hand that tab the current state right away, so the mini player follows you.
+chrome.tabs.onActivated.addListener(async function (info) {
+  const saved = await loadSavedState();
+  chrome.tabs.sendMessage(info.tabId, { type: 'state', state: saved || emptyState() }).catch(function () { /* no content script there */ });
+});
+
 chrome.windows.onRemoved.addListener(async function (windowId) {
   const stored = await chrome.storage.session.get('playerWindowId');
   if (stored.playerWindowId === windowId) {
