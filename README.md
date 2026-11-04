@@ -1,12 +1,19 @@
 # Motorpsycho Archive Player
 
-A Chrome extension to search and play the Motorpsycho live recordings from the
-[MotorpsychoBand collection on archive.org](https://archive.org/details/MotorpsychoBand).
+A Chrome extension to search and play live recordings from archive.org. It opens on the
+[Motorpsycho collection](https://archive.org/details/MotorpsychoBand); in the settings (gear icon) you can switch to
+[King Gizzard & The Lizard Wizard](https://archive.org/details/KingGizzardAndTheLizardWizard) or the
+[Grateful Dead](https://archive.org/details/GratefulDead).
 
 - **Search**: type a venue, city, song, taper or year. Uses archive.org's own search
   (`advancedsearch`), so every word can be the start of a word in the title, venue or
   description, or a whole word anywhere in the item's text (song titles).
-- **Year filter** (with the number of recordings per year) and sort newest/oldest first.
+- **Collections**: Motorpsycho (default), King Gizzard & The Lizard Wizard and Grateful Dead. Pick one under the gear icon;
+  the choice is remembered. Big collections (the Dead have 18,000+ recordings) load 200 at a time, with "Show more".
+- **Random mode**: the Random button (and the shuffle button in the player bar) plays random tracks from the selected
+  collection, one after the other. Set a year or a search first and the random tracks stay within it. Next picks
+  another random track, previous goes back to the one before. Press shuffle again to switch it off.
+- **Year filter** (with the number of recordings per year for the smaller collections) and sort newest/oldest first.
 - **Recording view**: all MP3 tracks with their length, Play all, or start from any track.
 - **Keeps playing** while the popup is closed, and while you browse. Sound runs in an
   offscreen document, so it does not depend on the popup or on one tab.
@@ -50,12 +57,20 @@ Needs Chrome 116 or newer.
 | `manifest.json` | Manifest V3. Permissions: `offscreen`, `storage`, and access to archive.org. |
 | `app.html` / `app.js` / `app.css` | The UI: used as the toolbar popup and (`?window=1`) as the maximized window. Talks to archive.org and sends commands. |
 | `background.js` | Service worker: creates the offscreen audio document, remembers the last state, relays state to every tab, opens the player window. |
+| `archive.js` | Everything that talks to archive.org (collections, search, years, tracks, random pick). Used by the UI and by the audio engine. |
 | `offscreen.html` / `offscreen.js` | The audio engine: one `<audio>` element, the queue, Media Session. Chrome closes this document after a while of silence; the worker then restores queue, track and position the next time you press play. |
 | `content.js` | The floating mini player (shadow DOM, so page CSS cannot touch it). |
 
 Messages: UI and mini player send `{type: 'command', cmd: ...}` to the worker, which starts the
 offscreen document if needed and forwards the command. The offscreen document answers with
 `{type: 'state', state}` (every change) and `{type: 'progress'}` (about once a second, popup only).
+
+## Random mode
+
+archive.org's own "random" sort always returns the same order, so the pick is made in the extension: it counts the
+recordings that match, takes a random position and fetches that one recording (and picks a random track of at least a
+minute from it). A collection too big to page through (Grateful Dead) is first narrowed to a random year. The audio
+engine does this itself, so it keeps going with a new random track when the popup is closed.
 
 ## When archive.org cannot deliver a file
 

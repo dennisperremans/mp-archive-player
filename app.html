@@ -12,13 +12,18 @@
       <div class="brand">
         <span class="brand__mark" aria-hidden="true"></span>
         <div>
-          <p class="brand__k">Motorpsycho</p>
+          <p class="brand__k" id="brandK">Motorpsycho</p>
           <h1 class="brand__t">Archive player</h1>
         </div>
       </div>
+      <div class="top__btns">
+      <button type="button" class="icon-btn" id="settingsBtn" title="Settings: choose a collection" aria-label="Settings: choose a collection">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
       <button type="button" class="icon-btn" id="openWindow" title="Open in its own window" aria-label="Open in its own window">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M10 6H5v13h13v-5"/></svg>
       </button>
+      </div>
     </header>
 
     <main class="main">
@@ -42,10 +47,26 @@
           </label>
           <button type="button" class="link-btn" id="reset" hidden>Reset</button>
         </div>
-        <p class="count" id="count" aria-live="polite"></p>
+        <div class="countrow">
+          <p class="count" id="count" aria-live="polite"></p>
+          <button type="button" class="btn btn--ghost" id="randomBtn" title="Play random tracks from this collection (within the year / search you set)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+            Random
+          </button>
+        </div>
+        <p class="randommsg" id="randomMsg" hidden aria-live="polite"></p>
 
         <ul class="list" id="list"></ul>
+        <button type="button" class="more" id="more" hidden>Show more</button>
         <div class="state" id="listState" hidden></div>
+      </section>
+
+      <!-- settings view -->
+      <section id="viewSettings" class="view" hidden>
+        <button type="button" class="back" id="settingsBack"><span aria-hidden="true">←</span> Back</button>
+        <h2 class="set__h">Collection</h2>
+        <p class="set__p">Choose the archive.org collection you want to browse. Random mode plays within the collection you pick.</p>
+        <div class="colls" id="collections"></div>
       </section>
 
       <!-- recording view -->
@@ -68,6 +89,9 @@
         <span class="time" id="timeTotal">0:00</span>
       </div>
       <div class="bar__ctl">
+        <button type="button" class="icon-btn shuffle" id="shuffle" aria-label="Random mode" aria-pressed="false" title="Play random tracks from this collection">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+        </button>
         <button type="button" class="icon-btn" id="prev" aria-label="Previous track" title="Previous">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
         </button>
@@ -88,6 +112,7 @@
       <p class="bar__err" id="barErr" hidden></p>
     </footer>
   </div>
+  <script src="archive.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

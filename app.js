@@ -1,14 +1,11 @@
 /*
- * Popup / player window UI. Searches the Motorpsycho collection on archive.org (advancedsearch), shows a recording's
- * tracks and controls the audio engine that lives in the offscreen document (see background.js / offscreen.js).
+ * Popup / player window UI. Searches the chosen archive.org collection (Motorpsycho by default, others in the settings),
+ * shows a recording's tracks and controls the audio engine that lives in the offscreen document
+ * (see background.js / offscreen.js). All archive.org access is in archive.js.
  */
 (function () {
   'use strict';
 
-  var BASE_QUERY = 'collection:MotorpsychoBand';
-  var SEARCH_URL = 'https://archive.org/advancedsearch.php';
-  var META_URL = 'https://archive.org/metadata/';
-  var CACHE_MS = 12 * 60 * 60 * 1000;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   var isWindow = new URLSearchParams(location.search).has('window');
@@ -19,7 +16,9 @@
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     form: $('searchForm'), q: $('q'), year: $('year'), sort: $('sort'), reset: $('reset'), count: $('count'),
-    list: $('list'), listState: $('listState'),
+    list: $('list'), listState: $('listState'), more: $('more'), randomBtn: $('randomBtn'), randomMsg: $('randomMsg'),
+    viewSettings: $('viewSettings'), settingsBtn: $('settingsBtn'), settingsBack: $('settingsBack'), collections: $('collections'),
+    brandK: $('brandK'), shuffle: $('shuffle'),
     viewList: $('viewList'), viewDetail: $('viewDetail'), back: $('back'), rec: $('rec'), tracks: $('tracks'), detailState: $('detailState'),
     bar: $('bar'), barTitle: $('barTitle'), barRec: $('barRec'), barErr: $('barErr'),
     main: document.querySelector('.main'),
@@ -27,8 +26,14 @@
     toggle: $('toggle'), prev: $('prev'), next: $('next'), stop: $('stop'), openWindow: $('openWindow')
   };
 
+  var A = MPArchive;
   var ui = { q: '', year: '', sort: 'desc' };
-  var player = { queue: [], index: -1, rec: null, playing: false, position: 0, duration: 0, volume: 1, error: '' };
+  var collection = A.collectionById('');   // the collection being browsed (saved in storage)
+  var page = 1;
+  var total = 0;
+  var shown = 0;
+  var yearsToken = 0;
+  var player = { queue: [], index: -1, rec: null, playing: false, position: 0, duration: 0, volume: 1, error: '', notice: '', random: null };
   var currentRec = null;      // recording shown in the detail view (with tracks)
   var searchId = 0;
   var detailId = 0;
@@ -54,23 +59,9 @@
     return h > 0 ? h + ':' + pad(m) + ':' + pad(s) : m + ':' + pad(s);
   }
 
-  function parseLength(value) {
-    if (value === undefined || value === null || value === '') { return 0; }
-    var text = String(value).trim();
-    if (/^\d+(\.\d+)?$/.test(text)) { return Math.round(parseFloat(text)); }
-    var parts = text.split(':').map(Number);
-    if (parts.some(isNaN)) { return 0; }
-    return parts.reduce(function (total, part) { return total * 60 + part; }, 0);
-  }
-
   function splitVenue(venue) {
     var at = venue.indexOf(',');
     return at === -1 ? { name: venue, place: '' } : { name: venue.slice(0, at).trim(), place: venue.slice(at + 1).trim() };
-  }
-
-  function venueOf(doc) {
-    var text = doc.venue || doc.title.replace(/^Motorpsycho Live at\s*/i, '').replace(/\s+on\s+\S+$/i, '');
-    return text.trim();
   }
 
   function stampNode(date) {
@@ -90,158 +81,6 @@
     return send(Object.assign({ type: 'command', cmd: cmd }, extra || {}));
   }
 
-  function storeGet(key) {
-    return chrome.storage.local.get(key).then(function (data) { return data[key]; });
-  }
-
-  function storeSet(key, value) {
-    var item = {};
-    item[key] = value;
-    return chrome.storage.local.set(item);
-  }
-
-  function fetchJson(url) {
-    var controller = new AbortController();
-    var abort = window.setTimeout(function () { controller.abort(); }, 20000);
-
-    return fetch(url, { signal: controller.signal })
-      .then(function (response) {
-        if (!response.ok) { throw new Error('archive.org answered ' + response.status); }
-        return response.json();
-      })
-      .finally(function () { window.clearTimeout(abort); });
-  }
-
-  /* ------------------------------------------------------------------ archive.org */
-
-  /**
-   * User text -> a safe archive.org (Lucene) clause. Every word may be the start of a word in the title, venue or
-   * description (wildcards only work on named fields) or a whole word anywhere in the item's text (song titles).
-   */
-  function textClause(text) {
-    var words = text.toLowerCase().replace(/[+\-!(){}\[\]^"~*?:\\\/&|]/g, ' ').split(/\s+/).filter(Boolean);
-    if (!words.length) { return ''; }
-
-    return words.map(function (word) {
-      return '(title:' + word + '* OR venue:' + word + '* OR description:' + word + '* OR ' + word + ')';
-    }).join(' AND ');
-  }
-
-  function buildQuery(state) {
-    var parts = [BASE_QUERY];
-    var clause = textClause(state.q);
-    if (clause) { parts.push(clause); }
-    if (/^\d{4}$/.test(state.year)) { parts.push('year:' + state.year); }
-    return parts.join(' AND ');
-  }
-
-  function searchRecordings(state) {
-    var params = new URLSearchParams();
-    params.set('q', buildQuery(state));
-    ['identifier', 'title', 'date', 'venue', 'source', 'taper'].forEach(function (field) { params.append('fl[]', field); });
-    params.append('sort[]', 'date ' + (state.sort === 'asc' ? 'asc' : 'desc'));
-    params.set('rows', '500');
-    params.set('page', '1');
-    params.set('output', 'json');
-
-    return fetchJson(SEARCH_URL + '?' + params.toString()).then(function (data) {
-      return ((data.response && data.response.docs) || []).map(function (doc) {
-        var rec = {
-          id: doc.identifier,
-          title: doc.title || doc.identifier,
-          date: String(doc.date || '').slice(0, 10),
-          venue: doc.venue || '',
-          source: Array.isArray(doc.source) ? doc.source.join(', ') : (doc.source || ''),
-          taper: Array.isArray(doc.taper) ? doc.taper.join(', ') : (doc.taper || '')
-        };
-        rec.venue = venueOf(rec);
-        return rec;
-      });
-    });
-  }
-
-  /** Years with the number of recordings, from one request (cached). */
-  function loadYears() {
-    return storeGet('years').then(function (cached) {
-      if (cached && Date.now() - cached.at < CACHE_MS) { return cached.data; }
-
-      return searchRecordings({ q: '', year: '', sort: 'desc' }).then(function (docs) {
-        var counts = {};
-        docs.forEach(function (doc) {
-          var year = doc.date.slice(0, 4);
-          if (year) { counts[year] = (counts[year] || 0) + 1; }
-        });
-        var data = Object.keys(counts).sort().reverse().map(function (year) { return { year: year, count: counts[year] }; });
-        storeSet('years', { at: Date.now(), data: data });
-        return data;
-      });
-    });
-  }
-
-  /** Same rules as the MPDB site: only the VBR MP3 derivatives, in track order. */
-  function getRecording(id, hint) {
-    var key = 'rec:' + id;
-
-    return storeGet(key).then(function (cached) {
-      if (cached && cached.v === 2 && Date.now() - cached.at < CACHE_MS) { return cached.data; }
-
-      return fetchJson(META_URL + encodeURIComponent(id)).then(function (data) {
-        var meta = data.metadata || {};
-        var files = (data.files || []).filter(function (file) { return file.name && String(file.format).toLowerCase() === 'vbr mp3'; });
-        if (!files.length) {
-          files = (data.files || []).filter(function (file) { return file.name && String(file.format).toLowerCase() === 'mp3'; });
-        }
-
-        var tracks = files.map(function (file, i) {
-          var base = file.name.replace(/\.[^.\/]+$/, '');
-          var title = file.title ? String(file.title).trim() : base.split('/').pop().replace(/^\s*\d+\s*[-._)]*\s*/, '').trim();
-          var number = /^\s*(\d+)/.exec(file.track || '') || /^\s*(\d+)/.exec(file.name.split('/').pop());
-          return {
-            order: number ? parseInt(number[1], 10) : 0,
-            name: file.name,
-            title: title || 'Track ' + (i + 1),
-            seconds: parseLength(file.length),
-            src: 'https://archive.org/download/' + encodeURIComponent(id) + '/' + file.name.split('/').map(encodeURIComponent).join('/')
-          };
-        });
-
-        tracks.sort(function (a, b) {
-          if (a.order && b.order && a.order !== b.order) { return a.order - b.order; }
-          return a.name.localeCompare(b.name, undefined, { numeric: true });
-        });
-
-        // The item's own servers: used as a fallback when archive.org/download redirects to a storage node that errors.
-        var servers = [];
-        var addServer = function (host, dir) {
-          if (host && dir && !servers.some(function (item) { return item.host === host && item.dir === dir; })) {
-            servers.push({ host: host, dir: dir });
-          }
-        };
-        (data.workable_servers || []).forEach(function (host) { addServer(host, data.dir); });
-        ((data.alternate_locations && data.alternate_locations.workable) || []).forEach(function (alt) { addServer(alt.server, alt.dir); });
-        addServer(data.d1, data.dir);
-        addServer(data.d2, data.dir);
-
-        var first = function (value) { return Array.isArray(value) ? value.join(', ') : (value || ''); };
-        var rec = {
-          id: id,
-          title: first(meta.title) || (hint && hint.title) || id,
-          date: String(first(meta.date) || (hint && hint.date) || '').slice(0, 10),
-          venue: first(meta.venue) || (hint && hint.venue) || '',
-          source: first(meta.source) || (hint && hint.source) || '',
-          taper: first(meta.taper) || (hint && hint.taper) || '',
-          url: 'https://archive.org/details/' + encodeURIComponent(id),
-          servers: servers,
-          tracks: tracks.map(function (track) { return { title: track.title, seconds: track.seconds, src: track.src, name: track.name }; })
-        };
-        if (!rec.venue) { rec.venue = venueOf(rec); }
-
-        storeSet(key, { v: 2, at: Date.now(), data: rec });
-        return rec;
-      });
-    });
-  }
-
   /* ------------------------------------------------------------------ list view */
 
   function showState(node, message, retry) {
@@ -256,8 +95,8 @@
     }
   }
 
-  function renderRows(docs) {
-    els.list.textContent = '';
+  function renderRows(docs, append) {
+    if (!append) { els.list.textContent = ''; }
     var liveId = player.rec ? player.rec.id : '';
 
     docs.forEach(function (doc) {
@@ -281,19 +120,32 @@
     });
   }
 
+  function updateCount() {
+    els.count.textContent = total + (total === 1 ? ' recording' : ' recordings');
+    els.more.hidden = shown >= total;
+    els.more.textContent = 'Show more (' + (total - shown) + ' left)';
+    els.more.disabled = false;
+  }
+
   function runSearch() {
     var id = ++searchId;
+    page = 1;
+    shown = 0;
+    total = 0;
     els.reset.hidden = !(ui.q || ui.year);
     els.listState.hidden = true;
+    els.more.hidden = true;
     els.list.textContent = '';
     for (var i = 0; i < 6; i++) { els.list.appendChild(el('li', 'skel')); }
     els.count.textContent = 'Searching archive.org…';
 
-    searchRecordings(ui).then(function (docs) {
+    A.search(collection, ui, 1).then(function (result) {
       if (id !== searchId) { return; }
-      els.count.textContent = docs.length + (docs.length === 1 ? ' recording' : ' recordings');
-      renderRows(docs);
-      if (!docs.length) { showState(els.listState, 'No recordings match your search.'); }
+      total = result.total;
+      shown = result.docs.length;
+      renderRows(result.docs, false);
+      updateCount();
+      if (!result.docs.length) { showState(els.listState, 'No recordings match your search.'); }
     }).catch(function () {
       if (id !== searchId) { return; }
       els.list.textContent = '';
@@ -302,11 +154,31 @@
     });
   }
 
+  function loadMore() {
+    var id = searchId;
+    els.more.disabled = true;
+    els.more.textContent = 'Loading…';
+
+    A.search(collection, ui, page + 1).then(function (result) {
+      if (id !== searchId) { return; }
+      page += 1;
+      shown += result.docs.length;
+      renderRows(result.docs, true);
+      updateCount();
+      if (!result.docs.length) { els.more.hidden = true; }
+    }).catch(function () {
+      if (id !== searchId) { return; }
+      els.more.disabled = false;
+      els.more.textContent = 'Could not load more. Try again';
+    });
+  }
+
   function saveUi() {
-    storeSet('ui', ui);
+    A.storeSet('ui', ui);
   }
 
   function showList() {
+    els.viewSettings.hidden = true;
     els.viewDetail.hidden = true;
     els.viewList.hidden = false;
     currentRec = null;
@@ -315,6 +187,7 @@
   /* ------------------------------------------------------------------ detail view */
 
   function openRecording(doc) {
+    els.viewSettings.hidden = true;
     els.viewList.hidden = true;
     els.viewDetail.hidden = false;
     els.main.scrollTop = 0;
@@ -331,7 +204,7 @@
     els.rec.appendChild(stampNode(doc.date));
     els.rec.appendChild(head);
 
-    getRecording(doc.id, doc).then(function (rec) {
+    A.getRecording(doc.id, doc).then(function (rec) {
       if (token === detailId && !els.viewDetail.hidden) { renderDetail(rec); }
     }).catch(function () {
       if (token !== detailId) { return; }
@@ -399,8 +272,10 @@
 
   function markLiveTrack() {
     var liveHere = currentRec && player.rec && player.rec.id === currentRec.id;
+    var playing = player.queue[player.index];
     els.tracks.querySelectorAll('.trk').forEach(function (button) {
-      var live = liveHere && Number(button.getAttribute('data-index')) === player.index;
+      var track = currentRec && currentRec.tracks[Number(button.getAttribute('data-index'))];
+      var live = liveHere && playing && track && track.name === playing.name;
       button.classList.toggle('is-live', !!live);
       button.classList.toggle('is-playing', !!live && player.playing);
     });
@@ -410,7 +285,7 @@
     command('playQueue', {
       queue: rec.tracks.map(function (track) { return { title: track.title, seconds: track.seconds, src: track.src, name: track.name }; }),
       index: index,
-      rec: { id: rec.id, title: rec.title, date: rec.date, venue: rec.venue, url: rec.url, servers: rec.servers || [] }
+      rec: { id: rec.id, title: rec.title, date: rec.date, venue: rec.venue, url: rec.url, servers: rec.servers || [], artist: rec.artist || '' }
     });
   }
 
@@ -420,14 +295,23 @@
     var track = player.queue[player.index];
     els.bar.hidden = !track;
     document.body.classList.toggle('has-bar', !!track);
+
+    // Nothing playing yet but a random track is being looked up (or that failed): say so under the filters.
+    var lookup = !track && (player.notice || player.error);
+    els.randomMsg.hidden = !lookup;
+    els.randomMsg.textContent = lookup ? (player.error || player.notice) : '';
+    els.randomBtn.disabled = !!(!track && player.notice);
     if (!track) { return; }
 
     els.bar.classList.toggle('is-playing-now', player.playing);
     els.toggle.setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
     els.barTitle.textContent = track.title;
-    els.barRec.textContent = player.rec ? [player.rec.date, player.rec.venue].filter(Boolean).join(' · ') : '';
+    els.barRec.textContent = (player.random ? 'Random · ' : '') + (player.rec ? [player.rec.date, player.rec.venue].filter(Boolean).join(' · ') : '');
+    els.shuffle.classList.toggle('is-on', !!player.random);
+    els.shuffle.setAttribute('aria-pressed', player.random ? 'true' : 'false');
+    els.shuffle.title = player.random ? 'Random mode is on (click to turn off)' : 'Play random tracks from this collection';
     els.prev.disabled = false;
-    els.next.disabled = player.index >= player.queue.length - 1;
+    els.next.disabled = !player.random && player.index >= player.queue.length - 1;
     els.barErr.hidden = !(player.error || player.notice);
     els.barErr.textContent = player.error || player.notice || '';
     els.barErr.classList.toggle('is-notice', !player.error && !!player.notice);
@@ -449,7 +333,7 @@
 
   function applyState(state) {
     if (!state) { return; }
-    player = Object.assign({ queue: [], index: -1, rec: null, playing: false, position: 0, duration: 0, volume: 1, error: '', notice: '' }, state);
+    player = Object.assign({ queue: [], index: -1, rec: null, playing: false, position: 0, duration: 0, volume: 1, error: '', notice: '', random: null }, state);
     renderPlayer();
   }
 
@@ -485,6 +369,83 @@
   });
 
   els.back.addEventListener('click', showList);
+  els.more.addEventListener('click', loadMore);
+
+  /** Random mode: random tracks from the collection, narrowed by the year / search you have set. */
+  function startRandom() {
+    command('random', { random: { query: A.buildQuery(collection, ui), collection: collection.id, name: collection.name } });
+  }
+
+  els.randomBtn.addEventListener('click', startRandom);
+  els.shuffle.addEventListener('click', function () {
+    if (player.random) { command('randomOff'); } else { startRandom(); }
+  });
+
+  /* ---- settings: which collection to browse ---- */
+
+  function renderCollections() {
+    els.collections.textContent = '';
+    A.COLLECTIONS.forEach(function (item) {
+      var label = el('label', 'coll' + (item.id === collection.id ? ' is-on' : ''));
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'collection';
+      radio.value = item.id;
+      radio.checked = item.id === collection.id;
+      var body = el('span', 'coll__b');
+      body.appendChild(el('span', 'coll__t', item.name));
+      body.appendChild(el('span', 'coll__m', 'archive.org/details/' + item.id));
+      label.appendChild(radio);
+      label.appendChild(body);
+      radio.addEventListener('change', function () { chooseCollection(item.id); });
+      els.collections.appendChild(label);
+    });
+  }
+
+  function openSettings() {
+    renderCollections();
+    els.viewList.hidden = true;
+    els.viewDetail.hidden = true;
+    els.viewSettings.hidden = false;
+    els.main.scrollTop = 0;
+  }
+
+  function closeSettings() {
+    els.viewSettings.hidden = true;
+    els.viewList.hidden = false;
+  }
+
+  function applyCollection() {
+    els.brandK.textContent = collection.name;
+    document.title = collection.name + ' · Archive player';
+    els.year.textContent = '';
+    var all = el('option', '', 'All years');
+    all.value = '';
+    els.year.appendChild(all);
+    var token = ++yearsToken;
+    A.loadYears(collection).then(function (years) {
+      if (token === yearsToken) { fillYears(years); } // ignore a slower answer for the collection you just left
+    }, function () { /* the list still works without the year menu */ });
+  }
+
+  function chooseCollection(id) {
+    if (id === collection.id) { closeSettings(); return; }
+    collection = A.collectionById(id);
+    ui.q = '';
+    ui.year = '';
+    els.q.value = '';
+    A.storeSet('collection', collection.id);
+    saveUi();
+    currentRec = null;
+    applyCollection();
+    closeSettings();
+    runSearch();
+  }
+
+  els.settingsBtn.addEventListener('click', function () {
+    if (els.viewSettings.hidden) { openSettings(); } else { closeSettings(); }
+  });
+  els.settingsBack.addEventListener('click', closeSettings);
 
   els.barTitle.addEventListener('click', function () {
     if (!player.rec) { return; }
@@ -531,20 +492,21 @@
 
   function fillYears(years) {
     years.forEach(function (item) {
-      var option = el('option', '', item.year + ' (' + item.count + ')');
+      var option = el('option', '', item.count ? item.year + ' (' + item.count + ')' : item.year);
       option.value = item.year;
       els.year.appendChild(option);
     });
     els.year.value = ui.year;
   }
 
-  Promise.all([storeGet('ui'), send({ type: 'getState' })]).then(function (results) {
+  Promise.all([A.storeGet('ui'), A.storeGet('collection'), send({ type: 'getState' })]).then(function (results) {
     if (results[0]) { ui = Object.assign(ui, results[0]); }
+    collection = A.collectionById(results[1] || '');
     els.q.value = ui.q;
     els.sort.value = ui.sort;
-    if (results[1] && results[1].state) { applyState(results[1].state); }
+    if (results[2] && results[2].state) { applyState(results[2].state); }
 
-    loadYears().then(fillYears, function () { /* the list still works without the year menu */ });
+    applyCollection();
     runSearch();
   });
 }());

@@ -137,3 +137,37 @@ input[type="range"] { -webkit-appearance: none; appearance: none; height: 18px; 
 .bar__seek input { flex: 1; min-width: 0; }
 input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: rgba(255, 255, 255, .2); }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; background: var(--y); border-radius: 50%; border: 0; }
+
+/* header buttons */
+.top__btns { display: flex; align-items: center; gap: 2px; }
+
+/* count row + random button */
+.countrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 8px; }
+.countrow .count { margin: 0; }
+.btn--ghost { min-height: 30px; padding: 0 10px; background: none; border: 1px solid rgba(255, 248, 95, .6); color: var(--y); font-size: 11px; letter-spacing: 1.5px; }
+.btn--ghost:hover { background: var(--y); color: #111; }
+.btn--ghost:disabled { opacity: .5; cursor: default; }
+.randommsg { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+
+.more { display: block; width: 100%; margin-top: 10px; padding: 10px; background: var(--s1); border: 1px solid var(--line); color: var(--y); font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.more:hover:not(:disabled) { border-color: var(--y); }
+.more:disabled { opacity: .6; cursor: default; }
+
+/* settings */
+.set__h { margin: 4px 0 6px; font-size: 15px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; }
+.set__p { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.colls { display: flex; flex-direction: column; gap: 6px; }
+.coll { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px; background: var(--s1); border: 1px solid var(--line); cursor: pointer; }
+.coll:hover { border-color: rgba(255, 255, 255, .3); }
+.coll.is-on { border-color: var(--y); background: rgba(255, 248, 95, .06); }
+.coll input { width: 18px; height: 18px; margin: 0; accent-color: #fff85f; }
+.coll__t { display: block; font-size: 13px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: #fff; }
+.coll__m { display: block; margin-top: 2px; font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* random mode toggle in the player bar */
+.shuffle.is-on { color: #111; background: var(--y); border-color: var(--y); }
+.shuffle.is-on:hover { color: #111; background: #fff; }
+
+.brand { min-width: 0; }
+.brand > div { min-width: 0; }
+.brand__k { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 2px; }

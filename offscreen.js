@@ -23,6 +23,9 @@ const preferred = {};   // recording id -> the address index that worked last, s
 let pendingSeek = 0; // position to jump to once the file has loaded (restore after the document was closed)
 let warmed = '';     // next track we already asked the browser to fetch
 let lastProgress = 0;
+let random = null;   // { query, collection, name } while the random mode is on: after every track another random one follows
+let history = [];    // random mode: the tracks played before this one, for "previous"
+let randomToken = 0; // a newer random request (or stop) makes an older, slower one drop its result
 
 function duration() {
   if (isFinite(audio.duration) && audio.duration > 0) {
@@ -41,7 +44,8 @@ function snapshot() {
     duration: duration(),
     volume: audio.volume,
     error: error,
-    notice: notice
+    notice: notice,
+    random: random
   };
 }
 
@@ -116,13 +120,66 @@ function load(i, autoplay, byItself) {
   broadcast();
 }
 
+/** Random mode: look up a random track of the collection and play it (the queue is just that one track). */
+function nextRandom(byItself, remember) {
+  if (!random) {
+    return;
+  }
+
+  var token = ++randomToken;
+  if (remember !== false && queue[index] && rec) {
+    history.push({ track: queue[index], rec: rec });
+    if (history.length > 20) {
+      history.shift();
+    }
+  }
+
+  notice = 'Finding a random track…';
+  error = '';
+  broadcast();
+
+  MPArchive.randomTrack(random).then(function (found) {
+    if (token !== randomToken || !random) {
+      return;
+    }
+    queue = [found.track];
+    rec = found.rec;
+    pendingSeek = 0;
+    load(0, true, true);
+  }, function () {
+    if (token !== randomToken || !random) {
+      return;
+    }
+    notice = '';
+    error = 'Could not find a random track right now.';
+    wantPlay = false;
+    if (!queue[index]) {
+      random = null; // nothing is playing: leave the random mode so the message can be shown on its own
+    }
+    broadcast();
+  });
+}
+
 function next(byItself) {
+  if (random) {
+    nextRandom(byItself === true);
+    return;
+  }
   if (index + 1 < queue.length) {
     load(index + 1, true, byItself === true);
   }
 }
 
 function prev() {
+  if (random && (audio.currentTime || 0) <= 3 && history.length) {
+    var before = history.pop();
+    randomToken++;
+    queue = [before.track];
+    rec = before.rec;
+    pendingSeek = 0;
+    load(0, true, true);
+    return;
+  }
   if ((audio.currentTime || 0) > 3 || index <= 0) {
     audio.currentTime = 0;
     broadcast();
@@ -154,6 +211,9 @@ function stop() {
   index = -1;
   rec = null;
   error = '';
+  random = null;
+  history = [];
+  randomToken++;
   broadcast();
 }
 
@@ -172,7 +232,9 @@ audio.addEventListener('loadedmetadata', function () {
 });
 
 audio.addEventListener('ended', function () {
-  if (index + 1 < queue.length) {
+  if (random) {
+    nextRandom(true);
+  } else if (index + 1 < queue.length) {
     next(true);
   } else {
     broadcast();
@@ -225,8 +287,9 @@ audio.addEventListener('error', function () {
   wantPlay = false;
   audio.pause();
   broadcast();
-  if (autoAdvance && index + 1 < queue.length) {
-    window.setTimeout(function () { next(true); }, 1200);
+  if (autoAdvance && (random || index + 1 < queue.length)) {
+    var failed = index;
+    window.setTimeout(function () { if (index === failed) { next(true); } }, 1200);
   }
 });
 
@@ -235,7 +298,7 @@ audio.addEventListener('timeupdate', function () {
   var left = duration() - (audio.currentTime || 0);
 
   // Warm the cache with the next file shortly before the end, so the gap between tracks stays small.
-  if (left > 0 && left < 12 && queue[index + 1] && warmed !== queue[index + 1].src) {
+  if (!random && left > 0 && left < 12 && queue[index + 1] && warmed !== queue[index + 1].src) {
     warmed = queue[index + 1].src;
     var warm = new Audio();
     warm.preload = 'auto';
@@ -264,7 +327,7 @@ function updateMediaSession() {
 
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
-    artist: 'Motorpsycho',
+    artist: (rec && rec.artist) || 'archive.org',
     album: rec ? rec.title : 'archive.org'
   });
   navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
@@ -291,14 +354,32 @@ chrome.runtime.onMessage.addListener(function (message) {
 
   switch (message.cmd) {
     case 'playQueue':
+      random = null;
+      history = [];
+      randomToken++;
       queue = message.queue || [];
       rec = message.rec || null;
       load(message.index || 0, true);
+      break;
+    case 'random':
+      random = message.random || null;
+      history = [];
+      queue = [];
+      index = -1;
+      rec = null;
+      nextRandom(false, false);
+      break;
+    case 'randomOff':
+      random = null;
+      randomToken++;
+      notice = '';
+      broadcast();
       break;
     case 'restore':
       // The document had been closed (Chrome does that after a while of silence): bring the queue back, paused.
       queue = message.state.queue || [];
       rec = message.state.rec || null;
+      random = message.state.random || null;
       pendingSeek = message.state.position || 0;
       if (typeof message.state.volume === 'number') {
         audio.volume = message.state.volume;

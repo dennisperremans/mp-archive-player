@@ -104,7 +104,7 @@
     var disc = document.createElement('button');
     disc.type = 'button';
     disc.className = 'disc';
-    disc.setAttribute('aria-label', 'Motorpsycho player: play or pause');
+    disc.setAttribute('aria-label', 'Archive player: play or pause');
     disc.innerHTML = '<span class="tri"></span><span class="bars"><i></i><i></i><i></i></span>';
     nodes.disc = disc;
 
