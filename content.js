@@ -156,13 +156,14 @@
 
   function open() {
     window.clearTimeout(closeTimer);
-    nodes.wrap.classList.add('open');
+    if (nodes.wrap) { nodes.wrap.classList.add('open'); }
   }
 
   function scheduleClose() {
     window.clearTimeout(closeTimer);
     closeTimer = window.setTimeout(function () {
-      if (!nodes.wrap.matches(':focus-within')) { nodes.wrap.classList.remove('open'); }
+      // The player may be gone by now (Stop removes it while this timer is still running).
+      if (nodes.wrap && !nodes.wrap.matches(':focus-within')) { nodes.wrap.classList.remove('open'); }
     }, 450);
   }
 
