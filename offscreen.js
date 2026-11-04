@@ -45,7 +45,8 @@ function snapshot() {
     volume: audio.volume,
     error: error,
     notice: notice,
-    random: random
+    random: random,
+    at: Date.now()
   };
 }
 

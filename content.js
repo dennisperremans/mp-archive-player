@@ -18,6 +18,8 @@
   var nodes = {};
   var pos = { fx: 1, fy: 1 }; // 0..1 inside the free area: 1,1 = bottom right corner
   var closeTimer = 0;
+  var tickTimer = 0;
+  var receivedAt = 0; // when the current state reached this page (fallback when the state has no timestamp)
 
   var CSS = '\
 :host { all: initial; }\
@@ -25,8 +27,9 @@
 .wrap { position: fixed; z-index: 2147483647; display: flex; align-items: center; font: 12px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #eef1ef; }\
 .wrap.left { flex-direction: row; }\
 .wrap.right { flex-direction: row-reverse; }\
-.disc { position: relative; flex: none; width: 46px; height: 46px; padding: 0; background: #181f21; border: 2px solid #fff85f; border-radius: 50%; box-shadow: 0 6px 18px rgba(0,0,0,.45); cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: none; }\
+.disc { position: relative; flex: none; width: 46px; height: 46px; padding: 0; background: #181f21; border: 2px solid rgba(255,255,255,.22); border-radius: 50%; box-shadow: 0 6px 18px rgba(0,0,0,.45); cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: none; }\
 .disc:hover { background: #222b2e; }\
+.ring { position: absolute; inset: -2px; border-radius: 50%; pointer-events: none; background: conic-gradient(#fff85f calc(var(--p, 0) * 1%), transparent 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)); }\
 .disc:focus-visible, .btn:focus-visible { outline: 2px solid #fff85f; outline-offset: 2px; }\
 .bars { display: none; align-items: flex-end; gap: 3px; height: 16px; }\
 .bars i { width: 3px; height: 30%; background: #fff85f; }\
@@ -105,7 +108,7 @@
     disc.type = 'button';
     disc.className = 'disc';
     disc.setAttribute('aria-label', 'Archive player: play or pause');
-    disc.innerHTML = '<span class="tri"></span><span class="bars"><i></i><i></i><i></i></span>';
+    disc.innerHTML = '<span class="ring"></span><span class="tri"></span><span class="bars"><i></i><i></i><i></i></span>';
     nodes.disc = disc;
 
     var panel = document.createElement('div');
@@ -137,8 +140,18 @@
 
     setupDrag(disc);
     document.documentElement.appendChild(host);
+    tickTimer = window.setInterval(tick, 200);
     place();
     window.addEventListener('resize', place);
+  }
+
+  /** The yellow ring is the share of the track that has played. Position is extrapolated between state messages. */
+  function tick() {
+    if (!nodes.wrap || !state) { return; }
+    var since = state.playing ? Math.max(0, Date.now() - (state.at || receivedAt)) / 1000 : 0;
+    var duration = state.duration || 0;
+    var percent = duration > 0 ? Math.min(100, Math.max(0, ((state.position || 0) + since) / duration * 100)) : 0;
+    nodes.wrap.style.setProperty('--p', percent.toFixed(2));
   }
 
   function open() {
@@ -220,6 +233,7 @@
 
     if (!track) {
       if (host) { host.remove(); host = null; nodes = {}; }
+      window.clearInterval(tickTimer);
       return;
     }
 
@@ -229,9 +243,11 @@
     nodes.wrap.classList.toggle('playing', !!state.playing);
     nodes.title.textContent = track.title;
     nodes.rec.textContent = state.rec ? [state.rec.date, state.rec.venue].filter(Boolean).join(' · ') : '';
+    tick();
   }
 
   function destroy() {
+    window.clearInterval(tickTimer);
     if (host) { host.remove(); host = null; nodes = {}; }
     window.__mpArchivePlayer = false;
   }
@@ -240,6 +256,7 @@
     chrome.runtime.onMessage.addListener(function (message) {
       if (message && message.type === 'state') {
         state = message.state;
+        receivedAt = Date.now();
         render();
       }
     });
@@ -250,6 +267,7 @@
       send({ type: 'getState' }).then(function (response) {
         if (response && response.state) {
           state = response.state;
+          receivedAt = Date.now();
           render();
         }
       });
